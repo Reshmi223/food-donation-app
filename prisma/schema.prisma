@@ -1,0 +1,301 @@
+// REMEAL — The Intelligent Food Rescue Network
+// Database schema (Prisma / SQLite)
+// NOTE: SQLite has no native enums/JSON — enum-like values are stored as Strings
+// and validated server-side (see src/lib/claims.ts and src/lib/validations.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============ USERS & AUTH ============
+
+model User {
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  passwordHash       String
+  // DONOR | NGO | VOLUNTEER | ADMIN  (role changes only allowed server-side by admins)
+  role               String   @default("DONOR")
+  displayName        String
+  organizationName   String?
+  // RESTAURANT | HOTEL | WEDDING_HALL | CATERING | SUPERMARKET | EVENT_ORGANIZER | OTHER  (donors)
+  // NGO | CHARITY | SHELTER | COMMUNITY_ORG  (recipients)
+  organizationType   String?
+  phone              String?
+  address            String?
+  locality           String?
+  district           String?
+  state              String?
+  avatarUrl          String?
+  // PENDING | VERIFIED | REJECTED | SUSPENDED
+  verificationStatus String   @default("PENDING")
+  emailVerified      Boolean  @default(false)
+  // NGO preferences: JSON array of category keys
+  preferredCategories String?
+  // NGO serving capacity (people per pickup)
+  capacityPerPickup  Int?
+  // Volunteer availability toggle
+  available          Boolean  @default(true)
+  suspendedReason    String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  listings             FoodListing[]
+  claims               FoodClaim[]
+  assignments          VolunteerAssignment[]
+  notifications        Notification[]
+  verifications        OrganizationVerification[] @relation("OrganizationVerifications")
+  safetyReports        SafetyReport[]
+  uploads              Upload[]
+  auditLogs            AuditLog[]
+  claimStatusHistory   ClaimStatusHistory[]
+  resetTokens          PasswordResetToken[]
+  verificationReviews  OrganizationVerification[] @relation("Reviewer")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ============ FOOD LISTINGS ============
+
+model FoodListing {
+  id                  String   @id @default(cuid())
+  donorId             String
+  donor               User     @relation(fields: [donorId], references: [id])
+  title               String
+  description         String
+  // PREPARED_MEALS | BAKERY | FRUITS_VEGETABLES | PACKAGED | DAIRY | BEVERAGES | GRAINS_STAPLES | DESSERTS | OTHER
+  category            String
+  // VEGETARIAN | NON_VEGETARIAN | VEGAN | UNKNOWN
+  dietary             String   @default("UNKNOWN")
+  quantity            Float
+  // MEALS | KG | PLATES | BOXES | LITRES | ITEMS
+  unit                String
+  remainingQuantity   Float
+  servings            Int?
+  preparedAt          DateTime
+  pickupStartAt       DateTime
+  pickupDeadline      DateTime
+  // AMBIENT | REFRIGERATED | HOT_HOLD | FROZEN | UNKNOWN
+  storage             String   @default("UNKNOWN")
+  allergens           String?  // JSON array of allergen keys
+  packaging           String?
+  pickupAddress       String   // PROTECTED — never exposed publicly
+  pickupLocality      String
+  district            String
+  state               String?
+  contactInstructions String?
+  images              String?  // JSON array of Upload ids
+  notes               String?
+  // DRAFT | AVAILABLE | PARTIALLY_RESERVED | FULLY_RESERVED | PICKED_UP | COMPLETED | EXPIRED | WITHDRAWN | FLAGGED
+  status              String   @default("DRAFT")
+  // PENDING | DONOR_CONFIRMED | FLAGGED
+  safetyReview        String   @default("PENDING")
+  donorConfirmed      Boolean  @default(false)
+  aiAssisted          Boolean  @default(false)
+  flaggedReason       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  claims         FoodClaim[]
+  safetyReports  SafetyReport[]
+
+  @@index([status, pickupDeadline])
+  @@index([donorId])
+  @@index([district])
+}
+
+// ============ CLAIMS ============
+
+model FoodClaim {
+  id                String    @id @default(cuid())
+  listingId         String
+  listing           FoodListing @relation(fields: [listingId], references: [id])
+  ngoId             String
+  ngo               User      @relation(fields: [ngoId], references: [id])
+  requestedQuantity Float
+  approvedQuantity  Float?
+  peopleToServe     Int?
+  collectionNotes   String?
+  intendedPickupAt  DateTime?
+  pickupCode        String?
+  rejectionReason   String?
+  // REQUESTED | ACCEPTED | REJECTED | CANCELLED | READY_FOR_PICKUP | PICKED_UP | DELIVERED | COMPLETED | DISPUTED
+  status            String    @default("REQUESTED")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  statusHistory        ClaimStatusHistory[]
+  volunteerAssignments VolunteerAssignment[]
+
+  @@index([listingId])
+  @@index([ngoId])
+  @@index([status])
+}
+
+model ClaimStatusHistory {
+  id             String    @id @default(cuid())
+  claimId        String
+  claim          FoodClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  actorId        String?
+  actor          User?     @relation(fields: [actorId], references: [id])
+  previousStatus String?
+  newStatus      String
+  reason         String?
+  createdAt      DateTime  @default(now())
+
+  @@index([claimId])
+}
+
+// ============ VOLUNTEER DELIVERIES ============
+
+model VolunteerAssignment {
+  id            String    @id @default(cuid())
+  claimId       String
+  claim         FoodClaim @relation(fields: [claimId], references: [id])
+  volunteerId   String
+  volunteer     User      @relation(fields: [volunteerId], references: [id])
+  // ASSIGNED | ACCEPTED | ON_THE_WAY | PICKED_UP | DELIVERED | VERIFIED_COMPLETE | CANCELLED
+  status        String    @default("ASSIGNED")
+  pickupNotes   String?
+  dropoffNotes  String?
+  dropoffAddress String?
+  proofUploadId String?
+  assignedAt    DateTime  @default(now())
+  acceptedAt    DateTime?
+  completedAt   DateTime?
+
+  @@index([volunteerId])
+  @@index([claimId])
+}
+
+// ============ NOTIFICATIONS ============
+
+model Notification {
+  id          String    @id @default(cuid())
+  recipientId String
+  recipient   User      @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  // NEW_MATCHING_LISTING | CLAIM_SUBMITTED | CLAIM_ACCEPTED | CLAIM_REJECTED | PICKUP_REMINDER |
+  // LISTING_EXPIRING | VOLUNTEER_ASSIGNMENT | DELIVERY_COMPLETED | VERIFICATION_UPDATE | SAFETY_REPORT_UPDATE | SYSTEM
+  type        String
+  title       String
+  message     String
+  linkUrl     String?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([recipientId, readAt])
+}
+
+// ============ NGO VERIFICATION ============
+
+model OrganizationVerification {
+  id             String    @id @default(cuid())
+  organizationId String
+  organization   User      @relation("OrganizationVerifications", fields: [organizationId], references: [id])
+  documentIds    String?   // JSON array of private Upload ids
+  registrationNo String?
+  website        String?
+  // PENDING | APPROVED | REJECTED
+  reviewStatus   String    @default("PENDING")
+  reviewerId     String?
+  reviewer       User?     @relation("Reviewer", fields: [reviewerId], references: [id])
+  reviewNotes    String?
+  submittedAt    DateTime  @default(now())
+  reviewedAt     DateTime?
+
+  @@index([reviewStatus])
+}
+
+// ============ SAFETY REPORTS ============
+
+model SafetyReport {
+  id            String    @id @default(cuid())
+  reporterId    String?
+  reporter      User?     @relation(fields: [reporterId], references: [id])
+  listingId     String?
+  listing       FoodListing? @relation(fields: [listingId], references: [id])
+  claimId       String?
+  // SPOILED_FOOD | WRONG_INFO | HYGIENE_CONCERN | ALLERGEN_MISSING | SUSPICIOUS | OTHER
+  category      String
+  description   String
+  // OPEN | REVIEWING | RESOLVED | DISMISSED
+  status        String    @default("OPEN")
+  resolution    String?
+  resolvedById  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status])
+  @@index([listingId])
+}
+
+// ============ AUDIT LOGS ============
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String
+  targetType String?
+  targetId   String?
+  reason     String?
+  metadata   String?  // JSON
+  createdAt  DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ============ SUPPORTING TABLES ============
+
+model PlatformSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model FoodCategory {
+  key       String  @id
+  label     String
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  // NEW | IN_PROGRESS | RESOLVED
+  status    String   @default("NEW")
+  createdAt DateTime @default(now())
+}
+
+// ============ UPLOADS (public images / private documents) ============
+
+model Upload {
+  id         String   @id @default(cuid())
+  ownerId    String
+  owner      User     @relation(fields: [ownerId], references: [id])
+  visibility String   @default("PRIVATE") // PUBLIC | PRIVATE
+  mimeType   String
+  sizeBytes  Int
+  data       String   // base64 payload
+  purpose    String?  // FOOD_PHOTO | VERIFICATION_DOC | PROOF_OF_DELIVERY | AVATAR
+  createdAt  DateTime @default(now())
+}
