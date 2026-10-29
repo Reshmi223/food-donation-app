@@ -80,7 +80,16 @@ function LoginForm() {
             />
           </div>
           {error && (
-            <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+            <div className="grid gap-1.5">
+              <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+              {error.toLowerCase().includes("invalid email") && (
+                <p className="text-xs text-muted-foreground">
+                  No account yet, or forgot your password? Tap a demo account above, {" "}
+                  <Link href="/forgot-password" className="underline hover:text-primary">reset your password</Link>, or{" "}
+                  <Link href="/register" className="underline hover:text-primary">create a new account</Link>.
+                </p>
+              )}
+            </div>
           )}
           <Button type="submit" disabled={loading} className="gap-2">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <LogIn className="h-4 w-4" aria-hidden />}

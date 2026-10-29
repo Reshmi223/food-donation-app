@@ -13,7 +13,6 @@ export async function GET() {
 
     const claims = await db.foodClaim.findMany({
       select: {
-        district: true,
         createdAt: true,
         status: true,
         approvedQuantity: true,
