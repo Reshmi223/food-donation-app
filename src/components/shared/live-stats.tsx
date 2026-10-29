@@ -28,7 +28,7 @@ export function LiveStats() {
   ];
 
   return (
-    <section aria-label="Live platform statistics" className="mx-auto -mt-10 max-w-7xl px-4 sm:px-6">
+    <section aria-label="Live platform statistics" className="relative z-10 mx-auto -mt-10 max-w-7xl px-4 sm:px-6">
       <div className="grid grid-cols-2 gap-3 rounded-2xl border bg-card p-5 shadow-sm sm:grid-cols-3 lg:grid-cols-6 sm:p-6">
         {items.map((item) => (
           <div key={item.label} className="text-center">
